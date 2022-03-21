@@ -10,6 +10,8 @@ import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
+import json 
+
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s",
@@ -127,6 +129,11 @@ def run_image(url_face: str, url_age_gender: str, image_path: str):
     genders, ages, bboxes, det_scores, landmarks, embeddings = send_to_servers(
         binary_image, url_face, url_age_gender
     )
+    #reading json 
+    json_path = image_path.replace("jpeg", "json")
+    file_json = open(json_path)
+    json_read = json.load(file_json)
+
     print("gender: ", genders, "age: ", ages, "BBOX: ", bboxes)
     #csv writing
     # data = pd.DataFrame(columns=['frame num','person id','bb_xmin','bb_ymin','bb_height','bb_width','age_min','age_max','age_actual','gender'])
@@ -142,10 +149,15 @@ def run_image(url_face: str, url_age_gender: str, image_path: str):
             'gender': []}
     for i, combine in enumerate(zip(genders, ages, bboxes)):
       gender, age, bbox = combine
-      data['bb_xmin'].append(bbox[0])
-      data['bb_ymin'].append(bbox[1])
-      data['bb_height'].append(bbox[3]-bbox[1])
-      data['bb_width'].append(bbox[2]-bbox[0])
+#       data['bb_xmin'].append(bbox[0])
+#       data['bb_ymin'].append(bbox[1])
+#       data['bb_height'].append(bbox[3]-bbox[1])
+#       data['bb_width'].append(bbox[2]-bbox[0])
+      data['bb_xmin'].append(json_read["x"])
+      data['bb_ymin'].append(json_read["y"])
+      data['bb_height'].append(json_read["h"])
+      data['bb_width'].append(json_read["w"])
+
       data['frame num'].append(int(image_path.split("/")[-1].split(".")[0]))
       data['person id'].append(i)
       data['age_min'].append(round(age['mean']) - round(10*age['entropy']))
