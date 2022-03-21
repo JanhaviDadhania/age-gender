@@ -10,8 +10,6 @@ import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
-import json 
-
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s",
@@ -66,21 +64,38 @@ def annotate_image(image: Image.Image, genders: list, ages: list, bboxes: list) 
     for gender, age, bbox in zip(genders, ages, bboxes):
         draw.rectangle(bbox.tolist(), outline=(0, 0, 0))
         draw.text(
-	@@ -98,8 +81,6 @@ def annotate_image(image: Image.Image, genders: list, ages: list, bboxes: list)
+            (bbox[0], bbox[1]),
+            f"AGE: {round(age[‘mean’])}, ENTROPY: {round(age[‘entropy’], 4)}",
+            fill=(255, 0, 0),
+            font=font,
+        )
+        draw.text(
+            (bbox[0], bbox[3]),
+            "MALE " + str(round(gender["m"] * 100)) + str("%") + ", "
+            "FEMALE "
+            + str(round(gender["f"] * 100))
+            + str("%")
+            + f", ENTROPY: {round(gender[‘entropy’], 4)}",
             fill=(0, 255, 0),
             font=font,
         )
 def save_annotated_image(
     image: Image.Image,
     save_path: str,
-	@@ -111,7 +92,6 @@ def save_annotated_image(
+    bboxes: list,
+    det_scores: list,
+    landmarks: list,
+    embeddings: list,
+    genders: list,
     ages: list,
 ) -> None:
     """Save the annotated image.
     Args
     ----
     image: Pilow image
-	@@ -121,11 +101,9 @@ def save_annotated_image(
+    bboxes:
+    det_scores:
+    landmarks:
     embeddings:
     genders:
     ages:
@@ -90,13 +105,14 @@ def save_annotated_image(
     to_dump = {
         "bboxes": bboxes,
         "det_scores": det_scores,
-	@@ -134,67 +112,89 @@ def save_annotated_image(
+        "landmarks": landmarks,
+        "embeddings": embeddings,
         "genders": genders,
         "ages": ages,
     }
     with open(save_path + ".pkl", "wb") as stream:
         pickle.dump(to_dump, stream)
-    logging.info(f"features saved at at {save_path + '.pkl'}")
+    logging.info(f"features saved at at {save_path + ‘.pkl’}")
 def run_image(url_face: str, url_age_gender: str, image_path: str):
     """Run age-gender on the image.
     Args
@@ -111,7 +127,6 @@ def run_image(url_face: str, url_age_gender: str, image_path: str):
     genders, ages, bboxes, det_scores, landmarks, embeddings = send_to_servers(
         binary_image, url_face, url_age_gender
     )
-
     #reading json 
     json_path = image_path.replace("jpeg", "json")
     file_json = open(json_path)
@@ -119,40 +134,40 @@ def run_image(url_face: str, url_age_gender: str, image_path: str):
 
     print("gender: ", genders, "age: ", ages, "BBOX: ", bboxes)
     #csv writing
-    # data = pd.DataFrame(columns=['frame num','person id','bb_xmin','bb_ymin','bb_height','bb_width','age_min','age_max','age_actual','gender'])
-    data = {'frame num': [],
-            'person id': [],
-            'bb_xmin': [],
-            'bb_ymin': [],
-            'bb_height': [],
-            'bb_width': [],
-            'age_min': [],
-            'age_max': [],
-            'age_actual': [],
-            'gender': []}
+    # data = pd.DataFrame(columns=[‘frame num’,‘person id’,‘bb_xmin’,‘bb_ymin’,‘bb_height’,‘bb_width’,‘age_min’,‘age_max’,‘age_actual’,‘gender’])
+    data = {‘frame num’: [],
+            ‘person id’: [],
+            ‘bb_xmin’: [],
+            ‘bb_ymin’: [],
+            ‘bb_height’: [],
+            ‘bb_width’: [],
+            ‘age_min’: [],
+            ‘age_max’: [],
+            ‘age_actual’: [],
+            ‘gender’: []}
     for i, combine in enumerate(zip(genders, ages, bboxes)):
       gender, age, bbox = combine
-      # data['bb_xmin'].append(bbox[0])
-      # data['bb_ymin'].append(bbox[1])
-      # data['bb_height'].append(bbox[3]-bbox[1])
-      # data['bb_width'].append(bbox[2]-bbox[0])
+#       data[‘bb_xmin’].append(bbox[0])
+#       data[‘bb_ymin’].append(bbox[1])
+#       data[‘bb_height’].append(bbox[3]-bbox[1])
+#       data[‘bb_width’].append(bbox[2]-bbox[0])
       data['bb_xmin'].append(json_read["x"])
       data['bb_ymin'].append(json_read["y"])
       data['bb_height'].append(json_read["h"])
       data['bb_width'].append(json_read["w"])
 
-      data['frame num'].append(int(image_path.split("/")[-1].split(".")[0]))
-      data['person id'].append(i)
-      data['age_min'].append(round(age['mean']) - round(10*age['entropy']))
-      data['age_max'].append(round(age['mean']) + round(10*age['entropy']))
-      data['age_actual'].append(round(age['mean']))
-      if gender['m'] > gender['f']:
-        detected_gender = 'M'
+      data[‘frame num’].append(int(image_path.split("/")[-1].split(".")[0]))
+      data[‘person id’].append(i)
+      data[‘age_min’].append(round(age[‘mean’]) - round(10*age[‘entropy’]))
+      data[‘age_max’].append(round(age[‘mean’]) + round(10*age[‘entropy’]))
+      data[‘age_actual’].append(round(age[‘mean’]))
+      if gender[‘m’] > gender[‘f’]:
+        detected_gender = ‘M’
       else:
-        detected_gender = 'F'
-      data['gender'].append(detected_gender)
+        detected_gender = ‘F’
+      data[‘gender’].append(detected_gender)
     dataframe = pd.DataFrame(data)
-    dataframe.to_csv(image_path.split('.')[0] + '.csv', index = False)
+    dataframe.to_csv(image_path.split(‘.’)[0] + ‘.csv’, index = False)
     # gender, age, bboxx, bboxy, bboxh, bboxw = gender
     image = Image.open(image_path)
     annotate_image(image, genders, ages, bboxes)
@@ -180,7 +195,13 @@ def run_webcam(url_face: str, url_age_gender: str, camera_id: int):
     # fps = []
     while True:
         start_time = time.time()  # start time of the loop
-	@@ -208,44 +208,32 @@ def run_webcam(url_face: str, url_age_gender: str, camera_id: int):
+        # Capture frame-by-frame
+        ret, image_BGR = cap.read()
+        # if frame is read correctly ret is True
+        if not ret:
+            print("Can’t receive frame (stream end?). Exiting ...")
+            break
+        # Our operations on the frame come here
         # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         # Display the resulting frame
         image_RGB = cv2.cvtColor(image_BGR, cv2.COLOR_BGR2RGB)
@@ -213,3 +234,8 @@ if __name__ == "__main__":
     mode = args.pop("mode")
     if mode == "image":
         assert args["image_path"] is not None
+        del args["camera_id"]
+        run_image(**args)
+    else:
+        del args["image_path"]
+        run_webcam(**args)
