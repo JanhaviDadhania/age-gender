@@ -131,6 +131,9 @@ def run_image(url_face: str, url_age_gender: str, image_path: str):
     )
     #reading json 
     json_path = image_path.replace("jpeg", "json")
+    id = json_path.split('/')[-1].split('.')[0]
+    json_path = json_path.replace('test', id)
+    json_path = '/'.join(json_path.split('/')[:-1] + ['0.json'])
     file_json = open(json_path)
     json_read = json.load(file_json)
 
